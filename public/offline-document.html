@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Collab Editor — Offline</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        min-height: 100vh;
+        background: #fafafa;
+        color: #171717;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        background: white;
+      }
+      header h1 {
+        font-size: 1.125rem;
+        margin: 0;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .badge {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 999px;
+        background: #fef3c7;
+        color: #92400e;
+        white-space: nowrap;
+      }
+      a.back {
+        color: #525252;
+        text-decoration: none;
+        font-size: 0.875rem;
+        white-space: nowrap;
+      }
+      textarea {
+        flex: 1;
+        width: 100%;
+        border: 0;
+        resize: none;
+        padding: 1.5rem;
+        font: 1rem/1.6 system-ui, sans-serif;
+        background: transparent;
+        color: inherit;
+        outline: none;
+      }
+      .empty {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        color: #525252;
+        padding: 2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a class="back" href="/dashboard">← Documents</a>
+      <h1 id="title">Document</h1>
+      <span class="badge" id="status">Offline</span>
+    </header>
+    <textarea id="editor" hidden aria-label="Document editor"></textarea>
+    <div class="empty" id="empty" hidden></div>
+    <script>
+      const DB_NAME = "collab-editor";
+      const docId = location.pathname.match(/^\/documents\/([^/]+)$/)?.[1];
+
+      function openDb() {
+        return new Promise((resolve, reject) => {
+          const req = indexedDB.open(DB_NAME);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      function getDocument(db, id) {
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction("documents", "readonly");
+          const req = tx.objectStore("documents").get(id);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      function saveDocument(db, doc) {
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction("documents", "readwrite");
+          const req = tx.objectStore("documents").put(doc);
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      function showEmpty(message) {
+        document.getElementById("editor").hidden = true;
+        const empty = document.getElementById("empty");
+        empty.hidden = false;
+        empty.textContent = message;
+      }
+
+      async function init() {
+        if (!docId) {
+          showEmpty("Document not found.");
+          return;
+        }
+
+        try {
+          const db = await openDb();
+          const doc = await getDocument(db, docId);
+          if (!doc) {
+            showEmpty("This document is not cached offline yet. Open it once while online.");
+            return;
+          }
+
+          const title = document.getElementById("title");
+          const editor = document.getElementById("editor");
+          const status = document.getElementById("status");
+
+          title.textContent = doc.title || "Untitled";
+          editor.value = doc.content || "";
+          editor.hidden = false;
+
+          let saveTimer;
+          const persist = async function () {
+            clearTimeout(saveTimer);
+            status.textContent = "Saving…";
+            try {
+              const nextVersion = (doc.version || 1) + 1;
+              await saveDocument(db, {
+                ...doc,
+                content: editor.value,
+                updatedAt: Date.now(),
+                version: nextVersion,
+              });
+              doc.content = editor.value;
+              doc.version = nextVersion;
+              doc.updatedAt = Date.now();
+              status.textContent = "Offline";
+            } catch {
+              status.textContent = "Save failed";
+            }
+          };
+
+          editor.addEventListener("input", function () {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(persist, 150);
+          });
+
+          window.addEventListener("pagehide", function () {
+            if (editor.value !== doc.content) {
+              clearTimeout(saveTimer);
+              const tx = db.transaction("documents", "readwrite");
+              tx.objectStore("documents").put({
+                ...doc,
+                content: editor.value,
+                updatedAt: Date.now(),
+                version: (doc.version || 1) + 1,
+              });
+            }
+          });
+        } catch {
+          showEmpty("Could not load cached document.");
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>

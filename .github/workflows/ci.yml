@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: collab_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:5432/collab_test
+      AUTH_SECRET: ci-test-secret-minimum-32-characters-long
+      NEXTAUTH_URL: http://localhost:3000
+      RUN_INTEGRATION: "true"
+      DATABASE_RLS_ENABLED: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx prisma generate
+      - run: npx prisma db push
+      - run: npm run db:rls
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type Check
+        run: npm run typecheck
+
+      - name: Unit Tests
+        run: npm run test
+
+      - name: Integration Tests
+        run: npm run test:integration
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Playwright
+        run: npx playwright install chromium --with-deps
+
+      - name: E2E Tests
+        run: npm run test:e2e

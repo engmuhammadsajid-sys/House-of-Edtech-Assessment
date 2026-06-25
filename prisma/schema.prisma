@@ -1,0 +1,223 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DocumentRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCING
+  SYNCED
+  FAILED
+}
+
+enum OperationType {
+  INSERT
+  DELETE
+}
+
+enum ActivityType {
+  DOCUMENT_CREATED
+  DOCUMENT_UPDATED
+  VERSION_CREATED
+  VERSION_RESTORED
+  MEMBER_ADDED
+  MEMBER_REMOVED
+  AI_ACTION
+}
+
+model User {
+  id            String           @id @default(cuid())
+  email         String           @unique
+  name          String?
+  passwordHash  String?
+  image         String?
+  emailVerified DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  ownedDocs     Document[]       @relation("DocumentOwner")
+  memberships   DocumentMember[]
+  operations    Operation[]
+  versions      VersionSnapshot[]
+  activities    ActivityLog[]
+  auditLogs     AuditLog[]
+
+  @@index([email])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Document {
+  id          String            @id @default(cuid())
+  title       String
+  content     String            @default("") @db.Text
+  tenantId    String
+  ownerId     String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  owner       User              @relation("DocumentOwner", fields: [ownerId], references: [id])
+  members     DocumentMember[]
+  operations  Operation[]
+  versions    VersionSnapshot[]
+  syncQueue   SyncQueue[]
+  activities  ActivityLog[]
+
+  @@index([tenantId, ownerId])
+  @@index([ownerId])
+  @@index([updatedAt])
+}
+
+model DocumentMember {
+  id         String       @id @default(cuid())
+  documentId String
+  userId     String
+  role       DocumentRole @default(VIEWER)
+  createdAt  DateTime     @default(now())
+  document   Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+  @@index([userId])
+  @@index([documentId, role])
+}
+
+model Operation {
+  id          String        @id @default(cuid())
+  documentId  String
+  userId      String
+  type        OperationType
+  position    Int
+  content     String        @default("") @db.Text
+  length      Int           @default(0)
+  lamportTime Int
+  vectorClock Json
+  clientId    String
+  acknowledged Boolean      @default(false)
+  createdAt   DateTime      @default(now())
+  document    Document      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id])
+
+  @@index([documentId, lamportTime])
+  @@index([clientId])
+  @@index([documentId, createdAt])
+  @@index([userId])
+}
+
+model SyncQueue {
+  id           String     @id @default(cuid())
+  documentId   String
+  operationId  String     @unique
+  status       SyncStatus @default(PENDING)
+  retryCount   Int        @default(0)
+  lastError    String?
+  nextRetryAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  document     Document   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
+  @@index([documentId, status])
+}
+
+model VersionSnapshot {
+  id          String   @id @default(cuid())
+  documentId  String
+  name        String
+  content     String   @db.Text
+  createdById String
+  parentId    String?
+  isRestore   Boolean  @default(false)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  @@index([documentId, createdAt])
+  @@index([createdById])
+}
+
+model ActivityLog {
+  id         String       @id @default(cuid())
+  documentId String?
+  userId     String
+  type       ActivityType
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+  document   Document?    @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  user       User         @relation(fields: [userId], references: [id])
+
+  @@index([documentId, createdAt])
+  @@index([userId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  resource  String
+  resourceId String?
+  metadata  Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([resource, resourceId])
+}
+
+model DeadLetterQueue {
+  id          String   @id @default(cuid())
+  documentId  String
+  operationId String
+  payload     Json
+  error       String
+  createdAt   DateTime @default(now())
+
+  @@index([documentId])
+}

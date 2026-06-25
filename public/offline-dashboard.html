@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Collab Editor — Offline</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        min-height: 100vh;
+        background: #fafafa;
+        color: #171717;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        background: white;
+      }
+      header h1 { font-size: 1.125rem; margin: 0; }
+      .badge {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 999px;
+        background: #fef3c7;
+        color: #92400e;
+      }
+      main { max-width: 56rem; margin: 0 auto; padding: 1.5rem; }
+      .empty { text-align: center; color: #525252; padding: 3rem 1rem; }
+      .card {
+        display: block;
+        background: white;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        color: inherit;
+        text-decoration: none;
+      }
+      .card:hover { background: rgba(0, 0, 0, 0.03); }
+      .meta { font-size: 0.75rem; color: #737373; margin-top: 0.25rem; }
+      a.back { color: #525252; text-decoration: none; font-size: 0.875rem; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Documents</h1>
+      <span class="badge">Offline</span>
+    </header>
+    <main id="root"><p class="empty">Loading cached documents…</p></main>
+    <script>
+      const DB_NAME = "collab-editor";
+
+      function openDb() {
+        return new Promise((resolve, reject) => {
+          const req = indexedDB.open(DB_NAME);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      function getAllDocuments(db) {
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction("documents", "readonly");
+          const req = tx.objectStore("documents").getAll();
+          req.onsuccess = () => resolve(req.result || []);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      async function render() {
+        const root = document.getElementById("root");
+        try {
+          const db = await openDb();
+          const docs = await getAllDocuments(db);
+          docs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+          if (docs.length === 0) {
+            root.innerHTML =
+              '<div class="empty"><p>No cached documents.</p><p>Open documents while online first.</p></div>';
+            return;
+          }
+
+          root.innerHTML = docs
+            .map(function (doc) {
+              const updated = doc.updatedAt
+                ? new Date(doc.updatedAt).toLocaleDateString()
+                : "Unknown";
+              return (
+                '<a class="card" href="/documents/' +
+                encodeURIComponent(doc.id) +
+                '">' +
+                '<strong>' +
+                escapeHtml(doc.title || "Untitled") +
+                "</strong>" +
+                '<div class="meta">Updated ' +
+                updated +
+                " · Cached locally</div></a>"
+              );
+            })
+            .join("");
+        } catch (error) {
+          root.innerHTML =
+            '<div class="empty"><p>Could not read offline storage.</p></div>';
+        }
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      render();
+    </script>
+  </body>
+</html>
