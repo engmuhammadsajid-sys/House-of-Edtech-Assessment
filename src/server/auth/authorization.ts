@@ -11,19 +11,19 @@ export interface DocumentAccess {
 }
 
 export class AuthorizationService {
+  /**
+   * Resolve role for a document.
+   * - Owner → OWNER
+   * - Explicit DocumentMember → that role
+   * - Any other authenticated user → VIEWER (documents are visible to all logged-in users)
+   */
   async getDocumentAccess(
     documentId: string,
     userId: string
   ): Promise<DocumentAccess | null> {
     return withRlsContext(userId, async (db) => {
       const doc = await db.document.findFirst({
-        where: {
-          id: documentId,
-          OR: [
-            { ownerId: userId },
-            { members: { some: { userId } } },
-          ],
-        },
+        where: { id: documentId },
         include: { members: { where: { userId } } },
       });
 
@@ -34,12 +34,19 @@ export class AuthorizationService {
       }
 
       const membership = doc.members[0];
-      if (!membership) return null;
+      if (membership) {
+        return {
+          documentId,
+          userId,
+          role: membership.role,
+          tenantId: doc.tenantId,
+        };
+      }
 
       return {
         documentId,
         userId,
-        role: membership.role,
+        role: "VIEWER",
         tenantId: doc.tenantId,
       };
     });

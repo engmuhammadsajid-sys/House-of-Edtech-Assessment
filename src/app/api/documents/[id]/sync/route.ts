@@ -71,7 +71,8 @@ export async function GET(
   const { id: documentId } = await params;
 
   try {
-    const access = await authz.requireSync(documentId, session.user.id);
+    // Viewers may pull/read ops; only EDITOR/OWNER may push (POST + requireSync).
+    const access = await authz.requirePermission(documentId, session.user.id, "read");
     await authz.assertDocumentTenant(access);
 
     const since = Number(new URL(request.url).searchParams.get("since") ?? 0);

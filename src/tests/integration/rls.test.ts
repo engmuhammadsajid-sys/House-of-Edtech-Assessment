@@ -58,11 +58,23 @@ describe.skipIf(!runIntegration)("Integration: PostgreSQL RLS", () => {
     await prisma.$disconnect();
   });
 
-  it("blocks outsider from reading document under RLS", async () => {
+  it("allows any authenticated user to read documents under RLS", async () => {
     const outsiderDocs = await withRlsContext(outsiderId, async (db) =>
       db.document.findMany({ where: { id: documentId } })
     );
-    expect(outsiderDocs).toHaveLength(0);
+    expect(outsiderDocs).toHaveLength(1);
+    expect(outsiderDocs[0].id).toBe(documentId);
+  });
+
+  it("blocks outsider from updating document under RLS", async () => {
+    await expect(
+      withRlsContext(outsiderId, async (db) =>
+        db.document.update({
+          where: { id: documentId },
+          data: { title: "Hacked" },
+        })
+      )
+    ).rejects.toThrow();
   });
 
   it("allows owner to read document under RLS", async () => {

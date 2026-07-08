@@ -82,11 +82,27 @@ function DocumentWorkspaceBody({ documentId: id, onBack }: DocumentWorkspaceProp
   }, [id]);
 
   useEffect(() => {
-    if (isOnline && wasOfflineRef.current) {
+    if (!isOnline) {
+      const live = useEditorStore.getState();
+      if (live.documentId === id) {
+        setLocalBootstrap((prev) => ({
+          id,
+          title: live.title || prev?.title || "Untitled",
+          content: live.content,
+          role: prev?.role ?? data?.role,
+        }));
+        setPreferLocal(true);
+      }
+      setResolvedForId(id);
+      wasOfflineRef.current = true;
+      return;
+    }
+
+    if (wasOfflineRef.current) {
       setResolvedForId(null);
       void queryClient.invalidateQueries({ queryKey: ["document", id] });
     }
-    wasOfflineRef.current = !isOnline;
+    wasOfflineRef.current = false;
   }, [isOnline, id, queryClient]);
 
   const { data, isError, isLoading: serverLoading, isFetched } = useQuery({
@@ -196,14 +212,30 @@ function DocumentWorkspaceBody({ documentId: id, onBack }: DocumentWorkspaceProp
     };
   }, [data, id, isOnline, isFetched, isError, queryClient]);
 
-  const serverDocument = isOnline ? data?.document : undefined;
-  const serverRole = isOnline ? data?.role : undefined;
+  // Keep last known server payload when offline so the editor does not remount/bootstrap
+  // to a stale empty snapshot and corrupt in-progress text.
+  const serverDocument = data?.document;
+  const serverRole = data?.role;
   const awaitingServer = isOnline && !!session?.user?.id && !isFetched;
-  const resolveReady = localReady && !awaitingServer && mergeReady;
+  const resolveReady = localReady && (!isOnline || !awaitingServer) && mergeReady;
+
+  const liveContent = useEditorStore((s) => (s.documentId === id ? s.content : ""));
+  const liveTitle = useEditorStore((s) => (s.documentId === id ? s.title : ""));
 
   const resolvedDoc = useMemo((): ResolvedDocument | null => {
     if (!resolveReady) return null;
-    if (serverDocument) {
+
+    // While online/offline toggling, prefer the live editor snapshot once available.
+    if (liveContent || liveTitle) {
+      return {
+        id,
+        title: liveTitle || localBootstrap?.title || serverDocument?.title || "Untitled",
+        content: liveContent || localBootstrap?.content || serverDocument?.content || "",
+        role: (isOnline ? serverRole : undefined) ?? localBootstrap?.role ?? serverRole,
+      };
+    }
+
+    if (isOnline && serverDocument) {
       if (preferLocal && localBootstrap) {
         return {
           id,
@@ -220,13 +252,32 @@ function DocumentWorkspaceBody({ documentId: id, onBack }: DocumentWorkspaceProp
       };
     }
     if (localBootstrap) return localBootstrap;
+    if (serverDocument) {
+      return {
+        id,
+        title: serverDocument.title,
+        content: serverDocument.content,
+        role: serverRole,
+      };
+    }
     return null;
-  }, [resolveReady, serverDocument, serverRole, localBootstrap, preferLocal, id]);
+  }, [
+    resolveReady,
+    serverDocument,
+    serverRole,
+    localBootstrap,
+    preferLocal,
+    id,
+    isOnline,
+    liveContent,
+    liveTitle,
+  ]);
 
+  // Only remount when the document id / role changes — not on online/offline or preferLocal flips.
   const editorBootstrapKey = useMemo(() => {
     if (!resolvedDoc) return `${id}:pending`;
-    return `${id}:${preferLocal}:${resolvedDoc.content}:${serverDocument?.content ?? ""}`;
-  }, [id, preferLocal, resolvedDoc, serverDocument?.content]);
+    return `${id}:${resolvedDoc.role ?? "none"}`;
+  }, [id, resolvedDoc?.role]);
 
   const userId = session?.user?.id ?? "";
   const userName = session?.user?.name ?? session?.user?.email ?? "User";

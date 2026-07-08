@@ -280,7 +280,9 @@ export function useCollaborativeEditor({
       const engine = new SyncEngine({
         documentId,
         userId,
-        baseContent: "",
+        // Merge base must match the snapshot we restore; "" would mis-apply positions
+        // after materialize/reset and scramble text (e.g. "Sajid" → "jidSj").
+        baseContent: bootstrapContent,
         pushOperations,
         pullOperations,
         onContentUpdate: (newContent) => {
@@ -374,7 +376,10 @@ export function useCollaborativeEditor({
         void syncEngineRef.current?.reconcile({ pullRemote: !needsSnapshot });
       })();
     };
-    const handleOffline = () => setOnline(false);
+    const handleOffline = () => {
+      flushPendingChange();
+      setOnline(false);
+    };
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
     setOnline(navigator.onLine);
