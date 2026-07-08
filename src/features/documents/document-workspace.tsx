@@ -63,9 +63,20 @@ function DocumentWorkspaceBody({ documentId: id, onBack }: DocumentWorkspaceProp
   const mergeReady = resolvedForId === id;
   const wasOfflineRef = useRef(!isOnline);
 
+  const { data, isError, isLoading: serverLoading, isFetched } = useQuery({
+    queryKey: ["document", id],
+    queryFn: () => fetchDocument(id),
+    enabled: !!session?.user?.id && isOnline,
+    retry: false,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       const local = await localDocRepo.current.getById(id);
+      if (cancelled) return;
       if (local) {
         setLocalBootstrap({
           id,
@@ -75,44 +86,30 @@ function DocumentWorkspaceBody({ documentId: id, onBack }: DocumentWorkspaceProp
         });
       }
       setLocalReady(true);
-      if (!isOnline) {
+      if (!navigator.onLine) {
         setResolvedForId(id);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
+  // On reconnect, refetch the server document. Offline content is kept via live
+  // editor store + localBootstrap (see resolvedDoc), not synchronous setState here.
   useEffect(() => {
     if (!isOnline) {
-      const live = useEditorStore.getState();
-      if (live.documentId === id) {
-        setLocalBootstrap((prev) => ({
-          id,
-          title: live.title || prev?.title || "Untitled",
-          content: live.content,
-          role: prev?.role ?? data?.role,
-        }));
-        setPreferLocal(true);
-      }
-      setResolvedForId(id);
       wasOfflineRef.current = true;
       return;
     }
 
-    if (wasOfflineRef.current) {
-      setResolvedForId(null);
-      void queryClient.invalidateQueries({ queryKey: ["document", id] });
-    }
+    if (!wasOfflineRef.current) return;
     wasOfflineRef.current = false;
-  }, [isOnline, id, queryClient]);
 
-  const { data, isError, isLoading: serverLoading, isFetched } = useQuery({
-    queryKey: ["document", id],
-    queryFn: () => fetchDocument(id),
-    enabled: !!session?.user?.id && isOnline,
-    retry: false,
-    staleTime: 0,
-    refetchOnMount: "always",
-  });
+    void queryClient.invalidateQueries({ queryKey: ["document", id] }).then(() => {
+      setResolvedForId(null);
+    });
+  }, [isOnline, id, queryClient]);
 
   useEffect(() => {
     let cancelled = false;
@@ -277,7 +274,7 @@ function DocumentWorkspaceBody({ documentId: id, onBack }: DocumentWorkspaceProp
   const editorBootstrapKey = useMemo(() => {
     if (!resolvedDoc) return `${id}:pending`;
     return `${id}:${resolvedDoc.role ?? "none"}`;
-  }, [id, resolvedDoc?.role]);
+  }, [id, resolvedDoc]);
 
   const userId = session?.user?.id ?? "";
   const userName = session?.user?.name ?? session?.user?.email ?? "User";
