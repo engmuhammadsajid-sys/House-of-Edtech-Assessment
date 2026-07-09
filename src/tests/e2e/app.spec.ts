@@ -143,7 +143,7 @@ test.describe("Viewer restrictions", () => {
     });
 
     await page.reload();
-    await expect(page.getByText("Viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByLabel("Your role: Viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(/read-only/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /snapshot/i })).toHaveAttribute("aria-disabled", "true");
     await expect(page.getByRole("button", { name: /ai assistant/i })).not.toBeVisible();
