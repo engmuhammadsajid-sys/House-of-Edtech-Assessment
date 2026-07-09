@@ -1,12 +1,20 @@
 -- Row Level Security for Collab Editor (PostgreSQL only)
 -- Apply: npm run db:rls
 -- Do not run in SQL Server / T-SQL tools; use psql or npm run db:rls
+--
+-- Visibility model:
+-- - Any authenticated user can read all documents (default VIEWER at app layer)
+-- - Write/sync requires OWNER or EDITOR membership (or being the document owner)
 
 -- Drop existing policies (idempotent re-apply)
 DROP POLICY IF EXISTS document_select ON "Document";
 DROP POLICY IF EXISTS document_modify ON "Document";
 DROP POLICY IF EXISTS document_member_select ON "DocumentMember";
 DROP POLICY IF EXISTS operation_access ON "Operation";
+DROP POLICY IF EXISTS operation_select ON "Operation";
+DROP POLICY IF EXISTS operation_insert ON "Operation";
+DROP POLICY IF EXISTS operation_update ON "Operation";
+DROP POLICY IF EXISTS operation_delete ON "Operation";
 DROP POLICY IF EXISTS version_select ON "VersionSnapshot";
 DROP POLICY IF EXISTS version_modify ON "VersionSnapshot";
 DROP POLICY IF EXISTS dead_letter_access ON "DeadLetterQueue";
@@ -24,6 +32,7 @@ AS $$
   SELECT nullif(current_setting('app.current_user_id', true), '');
 $$;
 
+-- Any authenticated session can read any document.
 CREATE OR REPLACE FUNCTION app_can_read_document(p_document_id text)
 RETURNS boolean
 LANGUAGE sql
@@ -31,21 +40,13 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM "Document" d
-    WHERE d.id = p_document_id
-      AND (
-        d."ownerId" = app_current_user_id()
-        OR EXISTS (
-          SELECT 1 FROM "DocumentMember" dm
-          WHERE dm."documentId" = d.id
-            AND dm."userId" = app_current_user_id()
-        )
-      )
-  );
+  SELECT app_current_user_id() IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM "Document" d WHERE d.id = p_document_id
+    );
 $$;
 
+-- Writes require ownership or explicit EDITOR/OWNER membership.
 CREATE OR REPLACE FUNCTION app_can_edit_document(p_document_id text)
 RETURNS boolean
 LANGUAGE sql
@@ -84,7 +85,7 @@ ALTER TABLE "DeadLetterQueue" FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY document_select ON "Document"
   FOR SELECT
-  USING (app_can_read_document(id));
+  USING (app_current_user_id() IS NOT NULL);
 
 CREATE POLICY document_modify ON "Document"
   FOR ALL
@@ -94,8 +95,20 @@ CREATE POLICY document_member_select ON "DocumentMember"
   FOR SELECT
   USING (app_can_read_document("documentId"));
 
-CREATE POLICY operation_access ON "Operation"
-  FOR ALL
+CREATE POLICY operation_select ON "Operation"
+  FOR SELECT
+  USING (app_can_read_document("documentId"));
+
+CREATE POLICY operation_insert ON "Operation"
+  FOR INSERT
+  WITH CHECK (app_can_edit_document("documentId"));
+
+CREATE POLICY operation_update ON "Operation"
+  FOR UPDATE
+  USING (app_can_edit_document("documentId"));
+
+CREATE POLICY operation_delete ON "Operation"
+  FOR DELETE
   USING (app_can_edit_document("documentId"));
 
 CREATE POLICY version_select ON "VersionSnapshot"

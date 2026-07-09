@@ -160,6 +160,31 @@ describe("SyncEngine", () => {
     expect(onQueueUpdate).toHaveBeenCalledWith([]);
   });
 
+  it("applies new ops relative to snapshot base after resetFromRestore", () => {
+    const onContentUpdate = vi.fn();
+    const engine = new SyncEngine({
+      documentId: "doc-1",
+      userId: "user-1",
+      baseContent: "",
+      pushOperations: vi.fn(),
+      pullOperations: vi.fn(),
+      onContentUpdate,
+      onStatusChange: vi.fn(),
+      onQueueUpdate: vi.fn(),
+    });
+
+    engine.resetFromRestore("Sajid");
+    engine.applyLocalOperations([
+      {
+        ...makeOp("op-append", "!"),
+        position: 5,
+        lamportTime: 1,
+      },
+    ]);
+
+    expect(engine.getContent()).toBe("Sajid!");
+  });
+
   it("initialize restores persisted queue from loadQueue", async () => {
     const persisted = [
       {

@@ -92,10 +92,12 @@ Auth.js with JWT sessions. Middleware protects `/dashboard`, `/documents`, and A
 | EDITOR | ✓ | ✓ | ✓ | ✓ | | |
 | OWNER | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-Viewers cannot send operations or access sync endpoints.
+Documents are visible to every logged-in user. Users without an explicit membership are treated as **VIEWER**.
+
+Viewers cannot send operations or push sync/realtime state updates. They may pull/read operations for presence. Owners can promote users to EDITOR via `POST /api/documents/[id]/members`.
 
 ### Tenant Scoping
-Every document has a `tenantId`. All queries are scoped by tenant and user membership to prevent horizontal privilege escalation.
+Every document has a `tenantId`. Write/sync paths still verify the document tenant after role checks. Read access is global for authenticated users; write access remains role-gated (OWNER/EDITOR).
 
 ## Scaling Strategy
 

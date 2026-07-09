@@ -1,28 +1,43 @@
 import { auth } from "@/server/auth/auth";
-import { prisma } from "@/server/db/prisma";
+import { prisma, withRlsContext } from "@/server/db/prisma";
 import { apiError, apiSuccess, parseJsonBody, rateLimit } from "@/server/middleware/security";
 import { createDocumentSchema, MAX_PAYLOAD_BYTES } from "@/lib/validation/schemas";
+import type { DocumentRole } from "@prisma/client";
+
+function resolveRole(
+  userId: string,
+  doc: { ownerId: string; members: { userId: string; role: DocumentRole }[] }
+): DocumentRole {
+  if (doc.ownerId === userId) return "OWNER";
+  const membership = doc.members.find((m) => m.userId === userId);
+  return membership?.role ?? "VIEWER";
+}
 
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return apiError("Unauthorized", 401);
 
-  const documents = await prisma.document.findMany({
-    where: {
-      OR: [
-        { ownerId: session.user.id },
-        { members: { some: { userId: session.user.id } } },
-      ],
-    },
-    include: {
-      owner: { select: { id: true, name: true } },
-      members: { include: { user: { select: { id: true, name: true } } } },
-      _count: { select: { operations: true, versions: true } },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+  const userId = session.user.id;
 
-  return apiSuccess({ documents });
+  const documents = await withRlsContext(userId, async (db) =>
+    db.document.findMany({
+      include: {
+        owner: { select: { id: true, name: true } },
+        members: {
+          include: { user: { select: { id: true, name: true } } },
+        },
+        _count: { select: { operations: true, versions: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+    })
+  );
+
+  return apiSuccess({
+    documents: documents.map((doc) => ({
+      ...doc,
+      role: resolveRole(userId, doc),
+    })),
+  });
 }
 
 export async function POST(request: Request) {
@@ -59,5 +74,5 @@ export async function POST(request: Request) {
     },
   });
 
-  return apiSuccess({ document }, 201);
+  return apiSuccess({ document, role: "OWNER" as DocumentRole }, 201);
 }

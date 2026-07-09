@@ -20,6 +20,7 @@ interface ApiDocument {
   title: string;
   updatedAt: string;
   owner: { name: string | null };
+  role?: "OWNER" | "EDITOR" | "VIEWER";
 }
 
 interface DashboardDocument {
@@ -27,6 +28,7 @@ interface DashboardDocument {
   title: string;
   updatedAt: number;
   ownerName: string;
+  role: "OWNER" | "EDITOR" | "VIEWER" | "Member";
   cachedLocally: boolean;
 }
 
@@ -117,7 +119,7 @@ export default function DashboardPage() {
           content: existing?.content ?? "",
           updatedAt: new Date(doc.updatedAt).getTime(),
           version: existing?.version ?? 1,
-          role: existing?.role,
+          role: doc.role ?? existing?.role ?? "VIEWER",
         });
       }
       const docs = await localDocRepo.current.getAll();
@@ -163,6 +165,7 @@ export default function DashboardPage() {
         title: doc.title,
         updatedAt: new Date(doc.updatedAt).getTime(),
         ownerName: doc.owner.name ?? "Unknown",
+        role: doc.role ?? "VIEWER",
         cachedLocally: localById.has(doc.id),
       }))
     : localDocs
@@ -172,6 +175,7 @@ export default function DashboardPage() {
           title: doc.title,
           updatedAt: doc.updatedAt,
           ownerName: session?.user?.name ?? session?.user?.email ?? "You",
+          role: doc.role ?? "Member",
           cachedLocally: true,
         }));
 
@@ -213,7 +217,7 @@ export default function DashboardPage() {
         <div className="flex justify-between items-center mb-6">
           <p className="text-foreground/60">
             {isOnline
-              ? "Your collaborative documents"
+              ? "All documents — access is role-based (Viewer / Editor / Owner)"
               : "Cached documents available offline"}
           </p>
           {isOnline && (
@@ -266,7 +270,12 @@ export default function DashboardPage() {
                 <Link key={doc.id} href={`/documents/${doc.id}`} prefetch>
                   <Card className="hover:bg-foreground/5 transition-colors cursor-pointer">
                     <CardHeader className="py-4">
-                      <CardTitle className="text-base">{doc.title}</CardTitle>
+                      <div className="flex items-center justify-between gap-2">
+                        <CardTitle className="text-base">{doc.title}</CardTitle>
+                        <Badge variant={doc.role === "VIEWER" ? "warning" : "default"}>
+                          {doc.role}
+                        </Badge>
+                      </div>
                       <p className="text-xs text-foreground/50">
                         {doc.ownerName} · Updated {new Date(doc.updatedAt).toLocaleDateString()}
                       </p>
@@ -280,7 +289,10 @@ export default function DashboardPage() {
                   onClick={() => openOfflineDocument(doc.id)}
                 >
                   <CardHeader className="py-4">
-                    <CardTitle className="text-base">{doc.title}</CardTitle>
+                    <div className="flex items-center justify-between gap-2">
+                      <CardTitle className="text-base">{doc.title}</CardTitle>
+                      <Badge variant="warning">{doc.role}</Badge>
+                    </div>
                     <p className="text-xs text-foreground/50">
                       {doc.ownerName} · Updated {new Date(doc.updatedAt).toLocaleDateString()}
                       {doc.cachedLocally && " · Cached"}

@@ -137,6 +137,8 @@ export class SyncEngine {
     this.queue = [];
     this.deadLetter = [];
     this.lamportTime = 0;
+    // Snapshot becomes the new merge base — subsequent ops are positioned relative to this content.
+    this.config.baseContent = content;
     this.content = content;
     this.config.onContentUpdate(content);
     this.config.onQueueUpdate([]);
