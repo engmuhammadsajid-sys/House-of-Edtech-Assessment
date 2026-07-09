@@ -122,7 +122,7 @@ test.describe("Document workflow", () => {
 });
 
 test.describe("Viewer restrictions", () => {
-  test("viewer role hides Snapshot and shows View only badge", async ({ page }) => {
+  test("viewer role disables Snapshot and AI Assistant and shows View only badge", async ({ page }) => {
     await registerAndLogin(page, createTestUser("viewer"));
     await createAndOpenDocument(page, "Viewer Test");
 
@@ -146,7 +146,10 @@ test.describe("Viewer restrictions", () => {
     await expect(page.getByLabel("Your role: Viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(/read-only/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /snapshot/i })).toHaveAttribute("aria-disabled", "true");
-    await expect(page.getByRole("button", { name: /ai assistant/i })).not.toBeVisible();
+    await expect(page.getByRole("button", { name: /ai assistant/i })).toHaveAttribute(
+      "aria-disabled",
+      "true"
+    );
 
     const editor = page.getByLabel("Document editor");
     await expect(editor).toHaveAttribute("readonly", "");
