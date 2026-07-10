@@ -13,6 +13,7 @@ interface CollaborativeEditorProps {
   onReadOnlyInteraction?: () => void;
   emitCursor: (cursor: number) => void;
   emitTyping: (isTyping: boolean) => void;
+  onSelectionChange?: (selectedText: string) => void;
   presence: import("@/types/operation").PresenceUser[];
 }
 
@@ -26,9 +27,21 @@ export const CollaborativeEditor = memo(function CollaborativeEditor({
   onReadOnlyInteraction,
   emitCursor,
   emitTyping,
+  onSelectionChange,
   presence,
 }: CollaborativeEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const reportSelection = useCallback(
+    (el: HTMLTextAreaElement) => {
+      if (!onSelectionChange) return;
+      const { selectionStart, selectionEnd, value } = el;
+      const text =
+        selectionStart !== selectionEnd ? value.slice(selectionStart, selectionEnd) : "";
+      onSelectionChange(text);
+    },
+    [onSelectionChange]
+  );
 
   // Sync remote/bootstrap content without fighting the user's cursor during local typing.
   useLayoutEffect(() => {
@@ -66,10 +79,12 @@ export const CollaborativeEditor = memo(function CollaborativeEditor({
 
   const handleSelect = useCallback(
     (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+      const el = e.target as HTMLTextAreaElement;
       if (readOnly) return;
-      emitCursor((e.target as HTMLTextAreaElement).selectionStart);
+      emitCursor(el.selectionStart);
+      reportSelection(el);
     },
-    [emitCursor, readOnly]
+    [emitCursor, readOnly, reportSelection]
   );
 
   const handleReadOnlyInteraction = useCallback(() => {

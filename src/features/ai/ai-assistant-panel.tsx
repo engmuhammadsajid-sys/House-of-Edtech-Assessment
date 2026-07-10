@@ -70,13 +70,24 @@ export const AIAssistantPanel = memo(function AIAssistantPanel({
           Select text in the editor, then choose an action. Results create a version snapshot.
         </p>
 
+        <div className="mb-3 rounded-md border border-foreground/10 bg-foreground/5 p-3">
+          <p className="text-xs font-medium text-foreground/70 mb-1">Selected text</p>
+          {selectedText.trim() ? (
+            <p className="text-sm whitespace-pre-wrap break-words max-h-32 overflow-auto">
+              {selectedText}
+            </p>
+          ) : (
+            <p className="text-sm text-foreground/50 italic">No text selected yet</p>
+          )}
+        </div>
+
         {ACTIONS.map((action) => (
           <Button
             key={action.id}
             variant="outline"
             size="sm"
             className="w-full justify-start"
-            disabled={loading}
+            disabled={loading || !selectedText.trim()}
             onClick={() => runAction(action.id)}
           >
             {action.label}
