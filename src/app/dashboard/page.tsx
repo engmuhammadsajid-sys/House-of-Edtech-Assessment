@@ -42,20 +42,7 @@ export default function DashboardPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [localDocs, setLocalDocs] = useState<DocumentState[]>([]);
   const [localReady, setLocalReady] = useState(false);
-  const [offlineDocId, setOfflineDocId] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-
-    const pendingId = sessionStorage.getItem("offline-document-id");
-    if (pendingId && !navigator.onLine) {
-      sessionStorage.removeItem("offline-document-id");
-      window.history.replaceState({ offlineDocument: pendingId }, "", `/documents/${pendingId}`);
-      return pendingId;
-    }
-
-    const match = window.location.pathname.match(/^\/documents\/([^/]+)$/);
-    if (match && !navigator.onLine) return match[1] ?? null;
-    return null;
-  });
+  const [offlineDocId, setOfflineDocId] = useState<string | null>(null);
 
   const openOfflineDocument = (id: string) => {
     setOfflineDocId(id);
@@ -72,6 +59,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const syncOfflineRoute = () => {
+      const pendingId = sessionStorage.getItem("offline-document-id");
+      if (pendingId && !navigator.onLine) {
+        sessionStorage.removeItem("offline-document-id");
+        window.history.replaceState({ offlineDocument: pendingId }, "", `/documents/${pendingId}`);
+        setOfflineDocId(pendingId);
+        return;
+      }
+
       const match = window.location.pathname.match(/^\/documents\/([^/]+)$/);
       if (match && !navigator.onLine) {
         setOfflineDocId(match[1] ?? null);
@@ -80,6 +75,7 @@ export default function DashboardPage() {
       setOfflineDocId(null);
     };
 
+    syncOfflineRoute();
     window.addEventListener("popstate", syncOfflineRoute);
     return () => window.removeEventListener("popstate", syncOfflineRoute);
   }, []);
