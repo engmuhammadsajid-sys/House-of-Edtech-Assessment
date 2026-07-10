@@ -85,7 +85,7 @@ npm run db:rls
 
 Set `NEXT_PUBLIC_SOCKET_URL` to your WebSocket server URL in production.
 
-See [docs/Deployment.md](./docs/Deployment.md) and [SUBMISSION_CHECKLIST.md](./SUBMISSION_CHECKLIST.md) for full details.
+See [docs/Deployment.md](./docs/Deployment.md) for full deployment details.
 
 ## Tech Stack
 
