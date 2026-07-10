@@ -4,8 +4,8 @@ A production-grade **local-first collaborative document editor** with determinis
 
 ## Links
 
-- **GitHub Repository:** https://github.com/khurram-dev-001/REPO_NAME_PLACEHOLDER
-- **Live Deployment:** https://YOUR_DEPLOYMENT_URL_PLACEHOLDER
+- **GitHub Repository:** https://github.com/engmuhammadsajid-sys/House-of-Edtech-Assessment.git
+- **Live Deployment:** https://house-of-edtech-assessment.vercel.app/
 
 ## Features
 

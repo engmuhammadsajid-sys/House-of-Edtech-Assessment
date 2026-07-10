@@ -353,11 +353,6 @@ function DocumentWorkspaceBody({ documentId: id, onBack }: DocumentWorkspaceProp
     [id, applyRestore, readOnly, showPermissionError]
   );
 
-  const captureSelection = useCallback(() => {
-    const selection = window.getSelection()?.toString() ?? "";
-    setSelectedText(selection);
-  }, []);
-
   const waitingForServer = isOnline && !!session?.user?.id && serverLoading && !localBootstrap;
   if (!localReady || waitingForServer || (isOnline && !!session?.user?.id && !resolveReady)) {
     return <div className="flex-1 flex items-center justify-center">Loading document...</div>;
@@ -403,14 +398,13 @@ function DocumentWorkspaceBody({ documentId: id, onBack }: DocumentWorkspaceProp
             showPermissionError(getPermissionDeniedMessage("ai"));
             return;
           }
-          captureSelection();
           setShowAI(true);
         }}
         onOpenHistory={() => setShowHistory(true)}
         onOpenDeadLetter={() => setShowDeadLetter(true)}
       />
 
-      <div className="flex flex-1 overflow-hidden" onMouseUp={captureSelection}>
+      <div className="flex flex-1 overflow-hidden">
         <CollaborativeEditor
           key={editorBootstrapKey}
           bootstrapKey={editorBootstrapKey}
@@ -422,6 +416,7 @@ function DocumentWorkspaceBody({ documentId: id, onBack }: DocumentWorkspaceProp
           onReadOnlyInteraction={() => showPermissionError(getPermissionDeniedMessage("edit"))}
           emitCursor={emitCursor}
           emitTyping={emitTyping}
+          onSelectionChange={setSelectedText}
           presence={presence}
         />
 
